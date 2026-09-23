@@ -1,0 +1,6 @@
+*.json
+!config.example.json
+reports/
+__pycache__/
+*.pyc
+.DS_Store

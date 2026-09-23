@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Game Launch Loop</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>Game Launch Loop</h1>
+          <p>Local QA/STG launch runner</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="clearReports" type="button" class="danger-button" title="清空 reports 資料夾裡的所有報告檔案。">Clear all report</button>
+          <div class="opensearch-menu" id="opensearchMenu">
+            <button id="opensearchToggle" type="button" class="secondary-button">OpenSearch Search</button>
+            <section id="opensearchPopover" class="opensearch-popover hidden">
+              <h2>OpenSearch Log Search</h2>
+              <label>
+                Search Text
+                <input id="opensearchKeyword" autocomplete="off" placeholder="groove or cs20260716071044">
+              </label>
+              <label>
+                Environment
+                <select id="opensearchEnv">
+                  <option value="QA">QA</option>
+                  <option value="STG">STG</option>
+                </select>
+              </label>
+              <div class="opensearch-action-row">
+                <label class="opensearch-google-sheets">
+                  <input id="opensearchGoogleSheets" type="checkbox">
+                  Google Sheets
+                </label>
+                <button id="opensearchCheckLogsButton" type="button" class="secondary-button">Check Logs</button>
+                <button id="opensearchClearLogButton" type="button" class="opensearch-clear-log-button">Clear log</button>
+                <button id="opensearchSearchButton" type="button" class="opensearch-search-button">Search</button>
+              </div>
+              <p class="field-hint">Use spaces around operators: groove or cs20260716071044</p>
+            </section>
+          </div>
+          <button id="checkReports" type="button" class="secondary-button" title="開啟 reports 資料夾列表。">Check all report</button>
+          <button id="reloadConfig" type="button" title="重新讀取 config.json 並更新畫面上的預設值。">Reload Config</button>
+        </div>
+      </header>
+
+      <section class="grid">
+        <form id="launchForm" class="panel" action="javascript:void(0)" onsubmit="return false;">
+          <div class="form-layout">
+            <section class="request-section">
+              <h2>Request</h2>
+              <div class="request-grid">
+                <label class="username-input">
+                  Username
+                  <input id="username" name="username" autocomplete="off" required>
+                </label>
+                <label>
+                  Language
+                  <input id="language" name="language" value="en">
+                </label>
+                <label>
+                  Platform
+                  <input id="platform" name="platform" value="WEB">
+                </label>
+                <label class="ip-input">
+                  IP Address
+                  <input id="ipAddress" name="ipAddress" value="192.228.180.86">
+                </label>
+                <label class="game-input">
+                  Game Code / Range
+                  <textarea id="gameInput" name="gameInput" rows="3" placeholder="GameCode1, GameCode2, GameCode3-5" required></textarea>
+                </label>
+                <label class="lobby-input">
+                  Lobby URL
+                  <input id="lobbyUrl" name="lobbyUrl" value="https://www.google.com/">
+                </label>
+              </div>
+              <div class="request-actions">
+                <button id="testStgLaunchButton" type="button" class="secondary-button">Test STG launch</button>
+              </div>
+            </section>
+
+            <section class="environment-section">
+              <h2>Environment</h2>
+              <div class="env-row">
+                <div class="segmented" role="group" aria-label="Environment mode">
+                  <label><input type="radio" name="envMode" value="qa"> QA</label>
+                  <label><input type="radio" name="envMode" value="stg" checked> STG</label>
+                  <label><input type="radio" name="envMode" value="qa,stg"> QA + STG</label>
+                </div>
+                <div id="envControls" class="env-controls"></div>
+              </div>
+
+              <div class="actions">
+                <label class="checkline"><input id="dryRun" type="checkbox"> Dry run</label>
+                <button id="runButton" type="button">Launch Game</button>
+              </div>
+            </section>
+          </div>
+        </form>
+
+        <section class="panel results">
+          <h2>Run Status</h2>
+          <div id="status" class="status idle">Ready</div>
+          <div id="reportBox" class="report-box hidden"></div>
+
+          <div id="launchActions" class="launch-actions hidden">
+            <div class="action-row">
+              <button id="openSelected" type="button">Open Selected Games</button>
+              <button id="openAll" type="button">Open All Games</button>
+            </div>
+            <div id="popupWarning" class="warning hidden"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Env</th>
+                  <th>Agent</th>
+                  <th>GameCode</th>
+                  <th>Currency</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="launchRows"></tbody>
+            </table>
+          </div>
+
+          <h2>Log</h2>
+          <pre id="logOutput"></pre>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js?v=20260915-error-details"></script>
+  </body>
+</html>
