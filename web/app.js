@@ -491,9 +491,15 @@ function renderLaunchUrls(items) {
 }
 
 function launchFailureStatus(items) {
-  const messages = items
-    .filter((item) => item.success !== 'YES' && (item.failureMessage || item.error || item.httpStatus))
-    .map((item) => item.failureMessage || item.error || `HTTP ${item.httpStatus}`);
+  const messageCounts = new Map();
+  for (const item of items) {
+    if (item.success === 'YES') continue;
+    const message = item.failureMessage || item.error || (item.httpStatus ? `HTTP ${item.httpStatus}` : '');
+    if (!message) continue;
+    messageCounts.set(message, (messageCounts.get(message) || 0) + 1);
+  }
+
+  const messages = Array.from(messageCounts, ([message, count]) => `${count} games ${message}`);
   return messages.length ? messages.join(' | ') : 'Game launch failed';
 }
 
