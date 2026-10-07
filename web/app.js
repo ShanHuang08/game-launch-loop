@@ -118,7 +118,7 @@ function normalizeCurrencies(value) {
 }
 
 function currencyValues(selected) {
-  return Array.from(new Set(['BRL', 'EUR', 'USD', 'INR', 'PHP', 'THB', 'TRY', 'VND(K)', 'VND', 'IDR(K)', 'CNY', ...selected].filter(Boolean)));
+  return Array.from(new Set(['BRL', 'EUR', 'USD', 'INR', 'PHP', 'THB', 'TRY', 'VND(K)', 'VND', 'IDR(K)', 'CNY', 'CLP', ...selected].filter(Boolean)));
 }
 
 function currencyOptions(selected) {

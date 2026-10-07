@@ -33,7 +33,7 @@ OPENSEARCH_INDEX_PATTERNS = {
 }
 CLOUDFLARE_VPN_HINT = (
     "Cloudflare blocked one or more launch game requests. "
-    "Please connect to FlyVPN and rerun."
+    "Please connect to FlyVPN and rerun or close multiple VPNs."
 )
 
 

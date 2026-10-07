@@ -113,7 +113,7 @@ The web UI is a local helper for building the same launch request without typing
 - The `Backup` action reads the matching OpenSearch `responseBody`. It supports JSON fields such as `launchUrl`, `gameUrl`, `gameLaunchUrl`, or `url`, and also accepts a response body whose complete value is a plain HTTP/HTTPS URL.
 - For QA backup URL lookup, OpenSearch first uses the primary QA index pattern and automatically retries with `qa_bac` when the primary query returns 0 records.
 - Failed launches show `Game launch failed` in Run Status and keep the Markdown report link available for debugging.
-- When Cloudflare blocks one or more launch requests, the Web UI log and Markdown report show `Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun.`
+- When Cloudflare blocks one or more launch requests, the Web UI log and Markdown report show `Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun or close multiple VPNs.`
 - `Reload Config` rereads `config.json` and updates the form defaults without restarting the web server.
 - `Clear all report` runs `python3 src/game_launch_loop.py --clear_report` and clears generated files from `reports`.
 - Hover over `Reload Config` or `Clear all report` to see a short Chinese tooltip.
@@ -243,7 +243,7 @@ python3 src/game_launch_loop.py --env qa --game-code PPGROOVE_158000584 --insecu
 When Cloudflare blocks one or more `/game/url` requests, the terminal or Web UI log and the generated Markdown report show:
 
 ```text
-Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun.
+Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun or close multiple VPNs.
 ```
 
 The launcher stops sending requests immediately after the first detected Cloudflare block. Remaining game codes, vendor items, and later environments are recorded as `SKIPPED` in the log and Markdown report. The report summary counts only sent requests under `Requests` and reports skipped items separately under `Skipped`.
