@@ -2,11 +2,13 @@
 import argparse
 import html
 import json
+import os
 import re
 import selectors
 import subprocess
 import sys
 import uuid
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -783,12 +785,31 @@ def report_web_url(report_path):
 
 
 def open_in_chrome(url):
-    return subprocess.run(
-        ["open", "-a", "Google Chrome", url],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    if sys.platform == "darwin":
+        return subprocess.run(
+            ["open", "-a", "Google Chrome", url],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    if os.name == "nt":
+        chrome_candidates = [
+            Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe",
+            Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Google/Chrome/Application/chrome.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+        ]
+        for chrome_path in chrome_candidates:
+            if chrome_path.is_file():
+                return subprocess.run(
+                    [str(chrome_path), url],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+
+    webbrowser.open(url)
+    return None
 
 
 class WebInputHandler(SimpleHTTPRequestHandler):
