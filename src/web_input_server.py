@@ -394,6 +394,8 @@ def build_opensearch_command(payload):
         cli_environment,
         "--keyword",
         keyword,
+        "--max-records",
+        "300",
     ]
     if payload.get("dryRun"):
         command.append("--dry-run")
