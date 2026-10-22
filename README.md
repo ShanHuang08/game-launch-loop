@@ -53,12 +53,20 @@ cp config.example.json config.json
     "ipAddress": "191.168.1.1"
   },
   "timeout_seconds": 30,
-  "delay_ms": 5000,
+  "delay_ms": 4000,
   "insecure_skip_tls_verify": true
 }
 ```
 
-`timeout_seconds` is the wait time for a failed/no-response request. `delay_ms` is the interval between every `/game/url` request; keep it at `5000` to avoid overwhelming the game server.
+`timeout_seconds` is the wait time for a failed/no-response request.
+
+`delay_ms` is the shared launch interval in milliseconds. The CLI reads this value in one place and applies it to:
+
+- each game code in normal `--game-code`, `--range`, or `--input` runs
+- each vendor item in `--json` runs
+- each environment block in multi-env runs such as `--env qa,stg`
+
+Keep it at `4000` or higher to avoid overwhelming the game server.
 
 `insecure_skip_tls_verify` is set to `true`, so all requests skip TLS certificate verification for QA/STG test environments.
 
@@ -78,6 +86,20 @@ It opens `http://127.0.0.1:20731` in Google Chrome. Use `--no-browser` if you on
 python3 src/web_input_server.py --no-browser
 ```
 
+### Easy Web Command
+
+After adding the project `scripts` folder to your PATH, start the web UI from anywhere:
+
+```bash
+gameurl
+```
+
+Arguments are passed through to `src/web_input_server.py`, so a different port still works:
+
+```bash
+gameurl --port 20732
+```
+
 ### Web UI
 
 The web UI is a local helper for building the same launch request without typing long CLI commands.
@@ -88,7 +110,10 @@ The web UI is a local helper for building the same launch request without typing
 - `Game Code / Range` is required. If it is empty, the browser shows a validation message and does not call the run API.
 - `Launch Game` runs the CLI through the local Python server and shows the current run status.
 - Successful launches show an `Open Game` area with one-click buttons for opening launch URLs in new tabs.
+- The `Backup` action reads the matching OpenSearch `responseBody`. It supports JSON fields such as `launchUrl`, `gameUrl`, `gameLaunchUrl`, or `url`, and also accepts a response body whose complete value is a plain HTTP/HTTPS URL.
+- For QA backup URL lookup, OpenSearch first uses the primary QA index pattern and automatically retries with `qa_bac` when the primary query returns 0 records.
 - Failed launches show `Game launch failed` in Run Status and keep the Markdown report link available for debugging.
+- When Cloudflare blocks one or more launch requests, the Web UI log and Markdown report show `Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun or close multiple VPNs.`
 - `Reload Config` rereads `config.json` and updates the form defaults without restarting the web server.
 - `Clear all report` runs `python3 src/game_launch_loop.py --clear_report` and clears generated files from `reports`.
 - Hover over `Reload Config` or `Clear all report` to see a short Chinese tooltip.
@@ -212,6 +237,18 @@ If a test environment has an incomplete TLS certificate chain, use:
 ```bash
 python3 src/game_launch_loop.py --env qa --game-code PPGROOVE_158000584 --insecure-skip-tls-verify
 ```
+
+## Cloudflare Blocking
+
+When Cloudflare blocks one or more `/game/url` requests, the terminal or Web UI log and the generated Markdown report show:
+
+```text
+Cloudflare blocked one or more launch game requests. Please connect to FlyVPN and rerun or close multiple VPNs.
+```
+
+The launcher stops sending requests immediately after the first detected Cloudflare block. Remaining game codes, vendor items, and later environments are recorded as `SKIPPED` in the log and Markdown report. The report summary counts only sent requests under `Requests` and reports skipped items separately under `Skipped`.
+
+Connect to FlyVPN, then rerun the same launch command or Web UI request.
 
 ## Input File Formats
 

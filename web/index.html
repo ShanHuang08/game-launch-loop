@@ -15,6 +15,33 @@
         </div>
         <div class="topbar-actions">
           <button id="clearReports" type="button" class="danger-button" title="清空 reports 資料夾裡的所有報告檔案。">Clear all report</button>
+          <div class="opensearch-menu" id="opensearchMenu">
+            <button id="opensearchToggle" type="button" class="secondary-button">OpenSearch Search</button>
+            <section id="opensearchPopover" class="opensearch-popover hidden">
+              <h2>OpenSearch Log Search</h2>
+              <label>
+                Search Text
+                <input id="opensearchKeyword" autocomplete="off" placeholder="groove or cs20260716071044">
+              </label>
+              <label>
+                Environment
+                <select id="opensearchEnv">
+                  <option value="QA">QA</option>
+                  <option value="STG">STG</option>
+                </select>
+              </label>
+              <div class="opensearch-action-row">
+                <label class="opensearch-google-sheets">
+                  <input id="opensearchGoogleSheets" type="checkbox">
+                  Google Sheets
+                </label>
+                <button id="opensearchCheckLogsButton" type="button" class="secondary-button">Check Logs</button>
+                <button id="opensearchClearLogButton" type="button" class="opensearch-clear-log-button">Clear log</button>
+                <button id="opensearchSearchButton" type="button" class="opensearch-search-button">Search</button>
+              </div>
+              <p class="field-hint">Use spaces around operators: groove or cs20260716071044</p>
+            </section>
+          </div>
           <button id="checkReports" type="button" class="secondary-button" title="開啟 reports 資料夾列表。">Check all report</button>
           <button id="reloadConfig" type="button" title="重新讀取 config.json 並更新畫面上的預設值。">Reload Config</button>
         </div>
@@ -44,12 +71,15 @@
                 </label>
                 <label class="game-input">
                   Game Code / Range
-                  <textarea id="gameInput" name="gameInput" rows="3" placeholder="PPGROOVE2_247000057, PPGROOVE2_247000159" required></textarea>
+                  <textarea id="gameInput" name="gameInput" rows="3" placeholder="GameCode1, GameCode2, GameCode3-5" required></textarea>
                 </label>
                 <label class="lobby-input">
                   Lobby URL
                   <input id="lobbyUrl" name="lobbyUrl" value="https://www.google.com/">
                 </label>
+              </div>
+              <div class="request-actions">
+                <button id="testStgLaunchButton" type="button" class="secondary-button">Test STG launch</button>
               </div>
             </section>
 
@@ -92,6 +122,7 @@
                   <th>GameCode</th>
                   <th>Currency</th>
                   <th>Status</th>
+                  <th>Error</th>
                   <th></th>
                 </tr>
               </thead>
@@ -104,6 +135,6 @@
         </section>
       </section>
     </main>
-    <script src="/app.js?v=20260706-1700"></script>
+    <script src="/app.js?v=20260915-error-details"></script>
   </body>
 </html>

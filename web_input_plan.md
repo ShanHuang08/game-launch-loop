@@ -25,7 +25,8 @@ Build a simple local web page so users do not need to remember CLI arguments. Th
 6. Backend validates the input.
 7. Backend updates `config.json` request/env values.
 8. Backend runs `src/game_launch_loop.py`.
-9. UI shows run status and links to the generated Markdown report.
+9. If Cloudflare blocks a launch request, the runner immediately stops sending requests and records all remaining game codes, vendor items, and environments as `SKIPPED`.
+10. UI shows run status and links to the generated Markdown report.
 
 ## Form Fields
 
@@ -119,8 +120,11 @@ Backend update rules:
 - Update `config.request.ipAddress`.
 - Update `config.environments.qa.currency` only when QA is selected.
 - Update `config.environments.stg.currency` only when STG is selected.
+- Keep `delay_ms` as the single shared launch interval in `config.json`; the web form does not maintain separate delay values.
 - Do not modify `ga_vendor_api`, `x_api_key`, or `x_api_secret` from the basic form.
 - Do not store gameCode in `config.json`; gameCode is a run-time input.
+
+`src/game_launch_loop.py` should read `delay_ms` through one helper and reuse that same value for normal game-code loops, JSON vendor-item loops, and waits between multiple selected environments.
 
 ## Backend Command Mapping
 
@@ -465,5 +469,4 @@ Browser popup note:
 - Add a "do not update config.json, run once only" checkbox.
 - Add per-run output filename prefix.
 - Add cancellation support for long bulk runs.
-- Stop bulk launch early after the first Cloudflare block. Mark remaining games as `SKIPPED` in the Markdown report with a short VPN reminder, so users can see which inputs were not executed and rerun after connecting VPN.
 - Stop bulk launch early after the first `/game/url` HTTP 502 error. Mark remaining games as `SKIPPED` in the Markdown report, so users can see which inputs were not executed and retry after the upstream error is resolved.

@@ -13,7 +13,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -21,13 +21,19 @@ from urllib.request import Request, urlopen
 DEFAULT_CONFIG = "config.json"
 COMMON_GAME_CODE_COLUMNS = ("gameCode", "game_code", "GAME_CODE", "code")
 REPORT_TIMEZONE = timezone(timedelta(hours=8))
+RESULT_ERROR_WRAP_LENGTH = 100
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OPENSEARCH_PROJECT_CANDIDATES = (
+    PROJECT_ROOT.parent / "open-search",
+    PROJECT_ROOT.parent / "cli",
+)
 OPENSEARCH_INDEX_PATTERNS = {
     "qa": "53ceb180-8f5d-11ef-b9c6-73a60e0d81fe",
     "stg": "48481400-8c6a-11ef-b9c6-73a60e0d81fe",
 }
 CLOUDFLARE_VPN_HINT = (
     "Cloudflare blocked one or more launch game requests. "
-    "Please connect VPN and rerun."
+    "Please connect to FlyVPN and rerun or close multiple VPNs."
 )
 
 
@@ -456,6 +462,186 @@ def parse_response_summary(response_body):
     return trim(json.dumps(parsed, ensure_ascii=False), 300), launch_url or ""
 
 
+def parse_response_error(response_body):
+    """Return the most useful API error text for failed launch responses."""
+    if not response_body:
+        return ""
+    try:
+        parsed = json.loads(response_body)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+
+    for key in ("error", "errorMessage", "exception", "message"):
+        value = parsed.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
+def opensearch_project_dir():
+    for candidate in OPENSEARCH_PROJECT_CANDIDATES:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def opensearch_python_path(project_dir):
+    candidates = [
+        project_dir / ".venv" / "bin" / "python",
+        project_dir / ".venv" / "Scripts" / "python.exe",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return Path(sys.executable)
+
+
+def opensearch_error_from_report(report_text):
+    """Extract non-empty detail errors from an OpenSearch Markdown report."""
+    errors = []
+    for match in re.finditer(
+        r"^<a id=\"log-\d+\"></a>\n.*?(?=^<a id=\"log-\d+\"></a>|\Z)",
+        report_text,
+        re.MULTILINE | re.DOTALL,
+    ):
+        error_match = re.search(r"^- Error: (.+)$", match.group(0), re.MULTILINE)
+        if error_match:
+            error = error_match.group(1).strip().strip("`")
+            if error and error not in errors:
+                errors.append(error)
+    return "\n".join(errors)
+
+
+def extract_fenced_section(block, heading):
+    match = re.search(
+        rf"(?mi)^### {re.escape(heading)}[ \t]*\n(?:[ \t]*\n)*[ \t]*(`{{3,}})(?:[A-Za-z0-9_-]+)?[ \t]*\n(.*?)\n\1[ \t]*$",
+        block,
+        re.DOTALL,
+    )
+    return match.group(2).strip() if match else ""
+
+
+def response_body_launch_url(response_body):
+    if not response_body:
+        return ""
+    raw_response = html.unescape(str(response_body)).strip()
+    try:
+        parsed = json.loads(raw_response)
+    except json.JSONDecodeError:
+        parsed = raw_response
+
+    if isinstance(parsed, str):
+        candidate = html.unescape(parsed).strip()
+        parsed_url = urlparse(candidate)
+        if (
+            parsed_url.scheme.lower() in {"http", "https"}
+            and parsed_url.netloc
+            and not any(character.isspace() for character in candidate)
+        ):
+            return candidate
+        return ""
+
+    return find_first_key(parsed, ("launchUrl", "gameUrl", "gameLaunchUrl", "url"))
+
+
+def opensearch_response_body_from_report(report_text, game_code):
+    """Extract the vendor Response Body that contains a playable launch URL."""
+    for match in re.finditer(
+        r"^<a id=\"log-\d+\"></a>\n.*?(?=^<a id=\"log-\d+\"></a>|\Z)",
+        report_text,
+        re.MULTILINE | re.DOTALL,
+    ):
+        block = match.group(0)
+        game_code_match = re.search(r"^- Game Code: `([^`]+)`", block, re.MULTILINE)
+        report_game_code = game_code_match.group(1) if game_code_match else ""
+        if report_game_code not in ("", "N/A", game_code):
+            continue
+        response_body = extract_fenced_section(block, "Response Body")
+        if response_body_launch_url(response_body):
+            return response_body
+    return ""
+
+
+def opensearch_report_path_from_stdout(stdout, project_dir):
+    report_match = re.search(r"^Markdown[：:]\s*(.+)$", stdout, re.MULTILINE)
+    if not report_match:
+        return None
+    report_path = Path(report_match.group(1).strip())
+    if not report_path.is_absolute():
+        report_path = project_dir / report_path
+    return report_path
+
+
+def fetch_opensearch_launch_log(env_name, username, game_code, timeout=60):
+    """Look up launch log fields without making log lookup fatal."""
+    empty = {"error": "", "response_body": ""}
+    project_dir = opensearch_project_dir()
+    if not project_dir or not username or not game_code:
+        return empty
+
+    def quote_keyword(value):
+        return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+    cli_environment = "staging" if str(env_name).lower() in {"stg", "staging"} else "QA"
+    command = [
+        str(opensearch_python_path(project_dir)),
+        "-m",
+        "cli",
+        "--env",
+        cli_environment,
+        "--keyword",
+        f'"{quote_keyword(username)}" and "{quote_keyword(game_code)}"',
+        "--max-records",
+        "100",
+        "--no-open-output",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=project_dir,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return empty
+    if completed.returncode != 0:
+        return empty
+
+    report_path = opensearch_report_path_from_stdout(completed.stdout, project_dir)
+    if not report_path:
+        return empty
+    try:
+        report_text = report_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return empty
+    return {
+        "error": opensearch_error_from_report(report_text),
+        "response_body": opensearch_response_body_from_report(report_text, game_code),
+    }
+
+
+def enrich_opensearch_errors(results, config):
+    """Keep launch output fast; OpenSearch lookups are only run by explicit UI actions."""
+    return
+
+
+def parse_response_status(response_body):
+    if not response_body:
+        return ""
+    try:
+        parsed = json.loads(response_body)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    status = parsed.get("status")
+    return str(status).strip() if status is not None else ""
+
+
 def parse_response_token(response_body):
     if not response_body:
         return ""
@@ -467,6 +653,11 @@ def parse_response_token(response_body):
 
 
 def is_cloudflare_block(result):
+    if result.get("ok"):
+        return False
+    if str(result.get("http_status")) == "403":
+        return True
+
     haystack = " ".join(
         str(result.get(key, ""))
         for key in ("http_status", "response_body", "error")
@@ -508,6 +699,15 @@ def trim(value, max_length):
 
 def markdown_escape(value):
     return str(value).replace("|", "\\|").replace("\n", "<br>")
+
+
+def markdown_result_error(value):
+    """Escape and wrap long errors so the Results table stays readable."""
+    text = str(value or "")
+    return "<br>".join(
+        markdown_escape(text[index : index + RESULT_ERROR_WRAP_LENGTH])
+        for index in range(0, len(text), RESULT_ERROR_WRAP_LENGTH)
+    )
 
 
 def markdown_line(value):
@@ -567,9 +767,63 @@ def has_cloudflare_block(results):
     return any(result.get("cloudflare_blocked") for result in results)
 
 
-def print_cloudflare_vpn_hint(results):
-    if has_cloudflare_block(results):
-        print(CLOUDFLARE_VPN_HINT)
+def build_cloudflare_skipped_result(
+    env_name,
+    env_config,
+    index,
+    game_code,
+    currency=None,
+    vendor=None,
+):
+    result = {
+        "env": env_name,
+        "agent_id": env_config.get("agent_id", ""),
+        "agent_name": agent_name(env_config),
+        "index": index,
+        "game_code": game_code,
+        "username": "",
+        "currency": currency if currency is not None else env_config.get("currency", ""),
+        "trace_id": "",
+        "http_status": "SKIPPED",
+        "success": "SKIPPED",
+        "summary": "",
+        "launch_url": "",
+        "error": CLOUDFLARE_VPN_HINT,
+        "cloudflare_blocked": False,
+        "request_body": "",
+        "response_body": "",
+        "backup_response_body": "",
+        "game_session_http_status": "SKIPPED",
+        "game_session_success": "SKIPPED",
+        "game_session_error": CLOUDFLARE_VPN_HINT,
+        "game_session_request_body": "",
+        "game_session_response_body": "",
+    }
+    if vendor is not None:
+        result["vendor"] = vendor
+    return result
+
+
+def append_skipped_game_codes(results, env_name, env_config, game_codes, start_index=1):
+    total = start_index + len(game_codes) - 1
+    for index, game_code in enumerate(game_codes, start=start_index):
+        results.append(
+            build_cloudflare_skipped_result(env_name, env_config, index, game_code)
+        )
+        print(
+            f"[{env_name}] {index}/{total} {game_code} "
+            "status=SKIPPED success=SKIPPED"
+        )
+
+
+def delay_seconds(config):
+    return config.get("delay_ms", 5000) / 1000
+
+
+def sleep_after_launch(config, should_sleep=True):
+    seconds = delay_seconds(config)
+    if should_sleep and seconds:
+        time.sleep(seconds)
 
 
 def run(
@@ -583,7 +837,6 @@ def run(
 ):
     results = []
     timeout = config.get("timeout_seconds", 30)
-    delay_seconds = config.get("delay_ms", 5000) / 1000
 
     for index, game_code in enumerate(game_codes, start=1):
         trace_id = str(uuid.uuid4())
@@ -618,6 +871,8 @@ def run(
             )
 
         summary, launch_url = parse_response_summary(result["response_body"])
+        response_error = parse_response_error(result["response_body"])
+        response_status = parse_response_status(result["response_body"])
         token = parse_response_token(result["response_body"])
         launch_success = is_launch_success(result, launch_url, token)
         cloudflare_blocked = is_cloudflare_block(result)
@@ -665,10 +920,11 @@ def run(
                 "success": "YES" if dry_run or launch_success else "NO",
                 "summary": summary,
                 "launch_url": launch_url,
-                "error": result["error"],
+                "error": result["error"] or (response_error if not launch_success else ""),
                 "cloudflare_blocked": cloudflare_blocked,
                 "request_body": raw_body,
                 "response_body": result["response_body"],
+                "backup_response_body": "",
                 "game_session_http_status": game_session_result["http_status"],
                 "game_session_success": game_session_result["success"],
                 "game_session_error": game_session_result["error"],
@@ -677,13 +933,34 @@ def run(
             }
         )
 
+        response_log = f" response={response_status}" if response_status else ""
         print(
             f"[{env_name}] {index}/{len(game_codes)} {game_code} "
             f"status={result['http_status']} success={results[-1]['success']}"
+            f"{response_log}"
         )
 
-        if delay_seconds and index < len(game_codes):
-            time.sleep(delay_seconds)
+        if cloudflare_blocked:
+            print(CLOUDFLARE_VPN_HINT)
+            for skipped_index, skipped_game_code in enumerate(
+                game_codes[index:],
+                start=index + 1,
+            ):
+                results.append(
+                    build_cloudflare_skipped_result(
+                        env_name,
+                        env_config,
+                        skipped_index,
+                        skipped_game_code,
+                    )
+                )
+                print(
+                    f"[{env_name}] {skipped_index}/{len(game_codes)} {skipped_game_code} "
+                    "status=SKIPPED success=SKIPPED"
+                )
+            break
+
+        sleep_after_launch(config, index < len(game_codes))
 
     return results
 
@@ -699,7 +976,6 @@ def run_json_launch_items(
 ):
     results = []
     timeout = config.get("timeout_seconds", 30)
-    delay_seconds = config.get("delay_ms", 5000) / 1000
 
     for index, item in enumerate(items, start=1):
         game_code = item["game_code"]
@@ -742,6 +1018,8 @@ def run_json_launch_items(
             )
 
         summary, launch_url = parse_response_summary(result["response_body"])
+        response_error = parse_response_error(result["response_body"])
+        response_status = parse_response_status(result["response_body"])
         token = parse_response_token(result["response_body"])
         launch_success = is_launch_success(result, launch_url, token)
         cloudflare_blocked = is_cloudflare_block(result)
@@ -790,10 +1068,11 @@ def run_json_launch_items(
                 "success": "YES" if dry_run or launch_success else "NO",
                 "summary": summary,
                 "launch_url": launch_url,
-                "error": result["error"],
+                "error": result["error"] or (response_error if not launch_success else ""),
                 "cloudflare_blocked": cloudflare_blocked,
                 "request_body": raw_body,
                 "response_body": result["response_body"],
+                "backup_response_body": "",
                 "game_session_http_status": game_session_result["http_status"],
                 "game_session_success": game_session_result["success"],
                 "game_session_error": game_session_result["error"],
@@ -802,14 +1081,44 @@ def run_json_launch_items(
             }
         )
 
+        response_log = f" response={response_status}" if response_status else ""
         print(
             f"[{env_name}] {index}/{len(items)} {item['vendor']} {game_code} "
             f"currency={item['currency']} status={result['http_status']} "
             f"success={results[-1]['success']}"
+            f"{response_log}"
         )
 
-        if delay_seconds and index < len(items):
-            time.sleep(delay_seconds)
+        if cloudflare_blocked:
+            print(CLOUDFLARE_VPN_HINT)
+            for skipped_index, skipped_item in enumerate(
+                items[index:],
+                start=index + 1,
+            ):
+                skipped_env_config = select_env_config(
+                    env_name,
+                    raw_env_config,
+                    {env_name: skipped_item["agent_id"]},
+                )
+                results.append(
+                    build_cloudflare_skipped_result(
+                        env_name,
+                        skipped_env_config,
+                        skipped_index,
+                        skipped_item["game_code"],
+                        currency=skipped_item["currency"],
+                        vendor=skipped_item["vendor"],
+                    )
+                )
+                print(
+                    f"[{env_name}] {skipped_index}/{len(items)} "
+                    f"{skipped_item['vendor']} {skipped_item['game_code']} "
+                    f"currency={skipped_item['currency']} "
+                    "status=SKIPPED success=SKIPPED"
+                )
+            break
+
+        sleep_after_launch(config, index < len(items))
 
     return results
 
@@ -819,6 +1128,9 @@ def write_markdown(path, config_path, env_names, game_codes, results, dry_run):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(REPORT_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S UTC+8")
     success_count = sum(1 for result in results if result["success"] == "YES")
+    skipped_count = sum(1 for result in results if result["success"] == "SKIPPED")
+    request_count = len(results) - skipped_count
+    failed_count = request_count - success_count
     has_vendor = any(result.get("vendor") for result in results)
     cloudflare_blocked = has_cloudflare_block(results)
 
@@ -829,9 +1141,10 @@ def write_markdown(path, config_path, env_names, game_codes, results, dry_run):
         f"- Config: `{config_path}`",
         f"- Environments: `{', '.join(env_names)}`",
         f"- Game codes: `{len(game_codes)}`",
-        f"- Requests: `{len(results)}`",
+        f"- Requests: `{request_count}`",
         f"- Success: `{success_count}`",
-        f"- Failed: `{len(results) - success_count}`",
+        f"- Failed: `{failed_count}`",
+        f"- Skipped: `{skipped_count}`",
         f"- Dry run: `{'YES' if dry_run else 'NO'}`",
         "",
     ]
@@ -867,7 +1180,7 @@ def write_markdown(path, config_path, env_names, game_codes, results, dry_run):
                     success=markdown_escape(result["success"]),
                     launch_url=markdown_launch_link(result["launch_url"]),
                     summary=markdown_escape(result["summary"]),
-                    error=markdown_escape(result["error"]),
+                    error=markdown_result_error(result["error"]),
                 )
             )
         else:
@@ -882,7 +1195,7 @@ def write_markdown(path, config_path, env_names, game_codes, results, dry_run):
                     success=markdown_escape(result["success"]),
                     launch_url=markdown_launch_link(result["launch_url"]),
                     summary=markdown_escape(result["summary"]),
-                    error=markdown_escape(result["error"]),
+                    error=markdown_result_error(result["error"]),
                 )
             )
 
@@ -919,10 +1232,16 @@ def write_markdown(path, config_path, env_names, game_codes, results, dry_run):
                 pretty_json(result["request_body"]),
                 "```",
                 "",
-                "Response",
+                "operator Response",
                 "",
                 "```json",
                 pretty_json(result["response_body"]),
+                "```",
+                "",
+                "responseBody",
+                "",
+                "```json",
+                pretty_json(result.get("backup_response_body", "")),
                 "```",
                 "",
                 "/agentPlayer/gameSession Request Body",
@@ -1043,6 +1362,7 @@ def main():
             args.insecure_skip_tls_verify,
             args.include_agent_id_in_body,
         )
+        enrich_opensearch_errors(all_results, json_config)
         output_path = write_markdown(
             timestamped_output_path(args.output) if args.output else default_output_path(),
             args.json_input,
@@ -1052,7 +1372,6 @@ def main():
             args.dry_run,
         )
         print(f"Markdown report written: {output_path}")
-        print_cloudflare_vpn_hint(all_results)
         if not args.no_open:
             open_markdown_in_chrome(output_path)
         return
@@ -1077,24 +1396,29 @@ def main():
 
     all_results = []
     for env_name in env_names:
-        if all_results:
-            delay_seconds = config.get("delay_ms", 5000) / 1000
-            if delay_seconds:
-                time.sleep(delay_seconds)
-
         env_config = select_env_config(env_name, environments[env_name], agent_id_map)
-        all_results.extend(
-            run(
+        if has_cloudflare_block(all_results):
+            append_skipped_game_codes(
+                all_results,
                 env_name,
                 env_config,
-                config,
                 game_codes,
-                args.dry_run,
-                args.insecure_skip_tls_verify,
-                args.include_agent_id_in_body,
             )
-        )
+            continue
 
+        sleep_after_launch(config, bool(all_results))
+        env_results = run(
+            env_name,
+            env_config,
+            config,
+            game_codes,
+            args.dry_run,
+            args.insecure_skip_tls_verify,
+            args.include_agent_id_in_body,
+        )
+        all_results.extend(env_results)
+
+    enrich_opensearch_errors(all_results, config)
     output_path = write_markdown(
         timestamped_output_path(args.output) if args.output else default_output_path(),
         args.config,
@@ -1104,7 +1428,6 @@ def main():
         args.dry_run,
     )
     print(f"Markdown report written: {output_path}")
-    print_cloudflare_vpn_hint(all_results)
     if not args.no_open:
         open_markdown_in_chrome(output_path)
 

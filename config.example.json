@@ -1,0 +1,36 @@
+{
+  "environments": {
+    "qa": {
+      "ga_vendor_api": "https://qa.example.com",
+      "currency": "BRL",
+      "agents": [
+        {
+          "agent_id": 1087,
+          "x_api_key": "QA_API_KEY",
+          "x_api_secret": "QA_API_SECRET"
+        }
+      ]
+    },
+    "stg": {
+      "ga_vendor_api": "https://stg.example.com",
+      "currency": "EUR",
+      "agents": [
+        {
+          "agent_id": 12,
+          "x_api_key": "STG_API_KEY",
+          "x_api_secret": "STG_API_SECRET"
+        }
+      ]
+    }
+  },
+  "request": {
+    "username": "ga251110",
+    "language": "en",
+    "platform": "WEB",
+    "lobbyUrl": "https://www.google.com/",
+    "ipAddress": "191.168.1.1"
+  },
+  "timeout_seconds": 30,
+  "delay_ms": 5000,
+  "insecure_skip_tls_verify": true
+}

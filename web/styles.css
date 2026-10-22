@@ -82,6 +82,80 @@ h3 {
   background: #8f1c13;
 }
 
+.opensearch-menu {
+  position: relative;
+}
+
+.opensearch-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 520px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(29, 36, 48, 0.18);
+  padding: 14px;
+}
+
+.opensearch-popover label {
+  margin-top: 10px;
+}
+
+.opensearch-popover button {
+  margin-top: 12px;
+}
+
+.opensearch-action-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.opensearch-popover .opensearch-google-sheets {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px auto 0 0;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.opensearch-google-sheets input {
+  width: auto;
+  margin: 0;
+}
+
+.opensearch-search-button {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.opensearch-search-button:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.opensearch-clear-log-button {
+  background: #c62828;
+  border-color: #c62828;
+  color: #fff;
+}
+
+.opensearch-clear-log-button:hover:not(:disabled) {
+  background: #a91f1f;
+  border-color: #a91f1f;
+}
+
+.field-hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .topbar p {
   color: var(--muted);
 }
@@ -104,7 +178,12 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.request-section {
+  display: flex;
+  flex-direction: column;
 }
 
 .environment-section {
@@ -234,6 +313,13 @@ textarea {
 
 .request-grid label:not(.username-input):not(.game-input):not(.lobby-input):not(.ip-input) {
   grid-column: span 2;
+}
+
+.request-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: 18px;
 }
 
 .segmented {
@@ -388,6 +474,10 @@ th {
   font-weight: 700;
 }
 
+.launch-error {
+  color: var(--danger);
+}
+
 td:first-child,
 th:first-child {
   width: 34px;
@@ -396,6 +486,13 @@ th:first-child {
 .launch-actions {
   margin: 14px 0;
   overflow-x: auto;
+}
+
+.launch-button-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 pre {
@@ -440,6 +537,12 @@ pre {
 }
 
 @media (max-width: 960px) {
+  .opensearch-popover {
+    right: auto;
+    left: 0;
+    width: min(520px, calc(100vw - 48px));
+  }
+
   .request-grid,
   .env-row {
     grid-template-columns: 1fr;
